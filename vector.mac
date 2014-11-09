@@ -92,6 +92,7 @@ Palette_RGB : [red,green,blue]$
 Palette_BGR : [blue,green,red]$
 Palette_RB : [red,blue]$
 Palette_BR : [blue,red]$
+Palette_WB : [white,black]$
 Palette_01  : ["#fffcf6","#fff7db","#fff4c2","#feecae","#f8ca8c","#f0a848","#c07860","#a86060","#784860","#604860"]$
 
 /* default palette used */
@@ -147,16 +148,17 @@ colorinterpolate(rl,color1,color2):=block([],
 
 
 /* ------------------------------------------------------------------------- */
-/* ----- project floats onto colors from palette p. Just an example -------- */
+/* -----                                                            -------- */
 /* ------------------------------------------------------------------------- */
-v2hex(v) := block([p, nc, idx],
+v2hex(v) := block([p, nc],
 
-  /*v : max(min(v,1),-1),*/
   /* write here your palette of colors */
-   /*1	2         3         4         5         6         7         8         9         10  */
+  /*1	2         3         4         5         6         7         8         9         10  */
   p: GlobalPalette,
+  if not listp(p) then return(p), /* if there is only one color, and it's not in a list*/
   nc: length(p),
   if nc=1 then return(p[1]), /* there is only 1 color in the palette */
+
   /* map range to color palette range */
   ratio: 1 + (nc-1)*(v-minv)/(maxv-minv),
   fr: floor(ratio),
@@ -180,7 +182,7 @@ v2hex(v) := block([p, nc, idx],
 /*        vectorpoints: nr of vectors in x and y direction                           */
 /* optional argument : vectorscale */
 /* ------------------------------------------------------------------------- */
-Vectorplot(fxy,xrange,yrange,[opt]):=block([x,y,fx,fy,Nx,Ny,Nxy,x1,x2,y1,y2,v,vectorscale],
+Vectorplot(fxy,xrangeV,yrangeV,[opt]):=block([x,y,fx,fy,Nx,Ny,Nxy,x1,x2,y1,y2,v,vectorscale],
 
 /* ----- which optional arguments do we want: */
 /* make xynr optional, default 10x10  */
@@ -195,12 +197,17 @@ Vectorplot(fxy,xrange,yrange,[opt]):=block([x,y,fx,fy,Nx,Ny,Nxy,x1,x2,y1,y2,v,ve
 
   vectorscale : assoc(vectorscale,opt,1.0),         /* scaling of vectors        */
   vectorpoints: assoc(vectorpoints,opt,[10,10]),    /* [Nx,Ny] number of vectors in x and y direction*/
-  /* */
+  terminalsetting: assoc(terminal,opt,wxt), /* set terminal (screen, png file, etc)*/
+  filename       : assoc(filename,opt,"maxima_out"),/* filename of figure when terminal is a file (png, etc) */ 
+  user_preamble: assoc(user_preamble,opt,"set style line 11 lc rgb '#555555' lt 1; set border back ls 11 lw 2 "),
+  xrange: assoc(xrange,opt,1.2*xrangeV), /* the actual xrange of the figure (shown on the axes), default=1.2*xrangeV */
+  yrange: assoc(yrange,opt,1.2*yrangeV), /* note that xrangeV is the range in which the vectors are being plotted.  */ 
 
+  print("terminal = ",terminalsetting),
   Lv: sort(listofvars(fxy)), /* we assume that the variable on the x-axis is also alphabetically first */
   if length(Lv)#2 then error("Vectorplot needs 2 variables, found ",Lv),
-  x : Lv[1],
-  y : Lv[2],
+  x: assoc(xvar,opt,Lv[1]), /* xvar determines the variable on the x-axis*/
+  y: assoc(yvar,opt,Lv[2]), /* yvar determines the variable on the y-axis*/
 
   /* split the list of vectors */
   fx:fxy[1], fy:fxy[2],
@@ -215,22 +222,29 @@ Vectorplot(fxy,xrange,yrange,[opt]):=block([x,y,fx,fy,Nx,Ny,Nxy,x1,x2,y1,y2,v,ve
   define(vecColors(x,y),colorfunction),
   print("veccolors = ",fundef(vecColors)),
 
-  colorpalette : assoc(colorpalette,opt,globalPalette),  
+  colorpalette : assoc(colorpalette,opt,GlobalPalette),  
   print("palette = ",colorpalette),
   oldGlobalPalette:GlobalPalette,
   GlobalPalette : colorpalette,  
 
-  /* the plot domain is (x1,x2) - (y1,y2) */
-  x1:xrange[1], x2:xrange[2],
-  y1:yrange[1], y2:yrange[2],
+  /* the plot domain to plot the vectors in is (x1,x2) - (y1,y2) */
+  x1:xrangeV[1], x2:xrangeV[2],
+  y1:yrangeV[1], y2:yrangeV[2],
+  AspectRatio : (y2-y1)/(x2-x1),
   Nx:vectorpoints[1]-1, Ny:vectorpoints[2]-1,
   Nxy:(Nx+1)*(Ny+1),
 
   /* smallest vector */
   /* largest vector should have the size of a cell*/
+  if listp(vectorscale) then (
+  Vmin : vectorscale[1],
+  Vmax : vectorscale[2],
+  vectorscale : 1.0
+  ) else (
   Vmax : min( (x2-x1)/Nx, (y2-y1)/Ny),
-  Vmin : 0.05*Vmax, /* nonzero Vmin*/
-
+  Vmin : 0.05*Vmax /* nonzero Vmin*/
+  ),
+  print("Vmin,Vmax=",Vmin,Vmax),
 
 
   /* initialization of the minimum and maximum values of the norm */
@@ -247,8 +261,14 @@ Vectorplot(fxy,xrange,yrange,[opt]):=block([x,y,fx,fy,Nx,Ny,Nxy,x1,x2,y1,y2,v,ve
                R),i,1,Nxy),
   /* Now scale the norm from [Nmin,Nmax] -> [0,Vmax] */
   /* (norm-Nmin)/(Nmax-Nmin) = (p-Vmin)/(Vmax-Vmin) */
+/*
+  print("Nmin,Nmax = ",Nmin,Nmax),
+  vectorclip : assoc(vectorclip,opt,[Nmin,Nmax]), /* clip the vector size */
+  ("vectorclip = ",vectorclip[1],vectorclip[2]),
+*/
   normp:(norm-Nmin)*(Vmax-Vmin)/(Nmax-Nmin) + Vmin,
 
+  print("Nmin,Nmax = ",Nmin,Nmax,vectorscale),
   dxdy:makelist((_x:(x2-x1)*(mod(i-1,(Nx+1))/Nx)+x1,
              _y:(y2-y1)*(quotient(i-1,(Nx+1))/Ny)+y1,
              tmpx:errcatch(dx(_x,_y)),
@@ -259,24 +279,37 @@ Vectorplot(fxy,xrange,yrange,[opt]):=block([x,y,fx,fy,Nx,Ny,Nxy,x1,x2,y1,y2,v,ve
 
   /* scale dxdy with the norm */
   /* also, use scale factor in case you want larger/smaller than default */
+  /* also, clipping activated */
+  /*dxdy:vectorscale*min(max(normp*dxdy/norm,vectorclip[1]),vectorclip[2]),*/
   dxdy:vectorscale*normp*dxdy/norm,
 
   xy:makelist((_x:(x2-x1)*(mod(i-1,(Nx+1))/Nx)+x1,
              _y:(y2-y1)*(quotient(i-1,(Nx+1))/Ny)+y1,
              [float(_x),float(_y)]),i,1,Nxy),
 
-  v1:xy-dxdy/2,
+  v1:xy-dxdy/2.0,
   v2:dxdy,
  
   /* find minimum and maximum for colors */
   v_values: makelist(apply(vecColors, xy[i]),i,1,Nxy),
   minv: lmin(v_values),
   maxv: lmax(v_values),
-  
+  print("minv,maxv = ",minv,maxv), 
   veclist:makelist(['color = v2hex(apply(vecColors, xy[i])), vector(v1[i],v2[i])],i,1,Nxy),
 
   GlobalPalette:oldGlobalPalette,
   /* draw the list of vectors */
-  draw2d('xrange=[1.2*x1,1.2*x2], 'yrange=[1.2*y1,1.2*y2], 'line_width=2, 'head_angle=20, 'head_length=0.30*Vmax, veclist)
+  header : ['terminal      = terminalsetting,
+            'file_name     = filename,
+            'font_size     = 16,
+            'dimensions    = [800,AspectRatio*800], 
+            'xrange        = [xrange[1],xrange[2]], 
+            'yrange        = [yrange[1],yrange[2]], 
+            'line_width    = 2, 
+            'head_angle    = 20, 
+            'head_length   = 0.30*Vmax,
+            'user_preamble = concat("set term ",terminalsetting," enhance font \"Charter,16\"; ",user_preamble)
+           ],
+  draw2d(header, veclist)
 )$
 
