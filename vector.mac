@@ -1,8 +1,10 @@
+/* Vectorplot */
 kill(all);
 load(draw);
 load("hex.lisp");
 
 
+/* define the names of the hexadecimal colors */
 white: "#ffffff"$
 black: "#000000"$
 gray0: "#000000"$
@@ -86,8 +88,7 @@ darkviolet: "#9400d3"$
 plum: "#dda0dd"$
 purple: "#c080ff"$
                                                                                         
-/* define the global palette */
-
+/* define some palettes */
 Palette_RGB : [red,green,blue]$
 Palette_BGR : [blue,green,red]$
 Palette_RB : [red,blue]$
